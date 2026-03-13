@@ -1,6 +1,4 @@
 # File System Simulator
-Operating Systems – Assignment 5
-
 ---
 
 ## How to Compile and Run
