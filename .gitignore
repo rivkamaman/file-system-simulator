@@ -1,0 +1,6 @@
+FILE_SYS
+*.o
+*.out
+build/
+
+
