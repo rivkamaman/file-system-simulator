@@ -1,4 +1,5 @@
 #include "lowfs.h"
+#include "monitor.h"
 #include <cstring>
 #include <algorithm>
 
@@ -7,6 +8,7 @@
 // ============================================================
 
 int LowFS::find_in_dir(int dir_inode_num, const std::string& name) {
+    Monitor::log(3, "LowFS", "find_in_dir(inode=" + std::to_string(dir_inode_num) + ", name=" + name + ")");
     INode dir;
     Disk::read_inode(dir_inode_num, dir);
     if (dir.type != TYPE_DIR) return -1;
@@ -218,6 +220,7 @@ int LowFS::get_or_alloc_block(SuperBlock& sb, INode& inode, int inode_num,
 
 int LowFS::inode_write(SuperBlock& sb, INode& inode, int inode_num,
                         int offset, const char* data, int len) {
+    Monitor::log(3, "LowFS", "f_write(inode=" + std::to_string(inode_num) + ", offset=" + std::to_string(offset) + ", len=" + std::to_string(len) + ")");
     int written = 0;
     while (written < len) {
         int logical = (offset + written) / BLOCK_SIZE;
@@ -243,6 +246,7 @@ int LowFS::inode_write(SuperBlock& sb, INode& inode, int inode_num,
 }
 
 int LowFS::inode_read(const INode& inode, int offset, char* buf, int len) {
+    Monitor::log(3, "LowFS", "f_read(offset=" + std::to_string(offset) + ", len=" + std::to_string(len) + ")");
     int avail = (int)inode.size - offset;
     if (avail <= 0) return 0;
     len = std::min(len, avail);
@@ -275,6 +279,7 @@ int LowFS::inode_read(const INode& inode, int offset, char* buf, int len) {
 
 int LowFS::create_inode(SuperBlock& sb, uint8_t type,
                          uint8_t owner, uint8_t permissions) {
+    Monitor::log(3, "LowFS", "f_create / d_create (type=" + std::to_string(type) + ", owner=" + std::to_string(owner) + ")");
     int ni = Disk::alloc_inode(sb);
     if (ni < 0) return -1;
 
@@ -288,6 +293,7 @@ int LowFS::create_inode(SuperBlock& sb, uint8_t type,
 }
 
 void LowFS::free_inode_data(SuperBlock& sb, INode& inode, int inode_num) {
+    Monitor::log(3, "LowFS", "f_delete(inode=" + std::to_string(inode_num) + ")");
     // Free all direct blocks
     for (int i = 0; i < DIRECT_BLOCKS; i++) {
         if (inode.direct[i]) {

@@ -1,5 +1,6 @@
 #include "fs.h"
 #include "cache.h"
+#include "monitor.h"
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -105,8 +106,18 @@ int main() {
             if (tok.size() < 3) { std::cerr << "Usage: import <unix_path> <sim_path>\n"; continue; }
             fs.import_file(tok[1], tok[2]);
 
+        } else if (cmd == "chmod") {
+            if (tok.size() < 3) { std::cerr << "Usage: chmod <mode> <file>\n"; continue; }
+            fs.chmod(std::stoi(tok[1]), tok[2]);
+
         } else if (cmd == "cache_status") {
             g_cache.print_status();
+
+        } else if (cmd == "monitor") {
+            Monitor::enable();
+
+        } else if (cmd == "no_monitor") {
+            Monitor::disable();
 
         } else {
             std::cerr << "Unknown command: " << cmd << "\n";

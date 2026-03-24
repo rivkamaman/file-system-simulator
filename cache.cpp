@@ -9,6 +9,7 @@
 //  On lookup:       map[block_num]             (O(1))
 // ============================================================
 #include "cache.h"
+#include "monitor.h"
 #include <iostream>
 #include <fstream>
 
@@ -96,10 +97,13 @@ bool BlockCache::read(int block_num, void* buf) {
     if (it != map.end()) {
         // ---- Cache HIT ----
         Node* node = it->second;
-        move_to_head(node);          // mark as most recently used
+        Monitor::log(4, "Cache", "READ block=" + std::to_string(block_num) + " -> HIT  (dirty=" + (node->dirty ? "Y" : "N") + ")");
+        move_to_head(node);
         memcpy(buf, node->data, BLOCK_SIZE);
         return true;
     }
+
+    Monitor::log(4, "Cache", "READ block=" + std::to_string(block_num) + " -> MISS (loading from disk)");
 
     // ---- Cache MISS ----
     Node* node;
@@ -135,12 +139,14 @@ bool BlockCache::write(int block_num, const void* buf) {
     if (it != map.end()) {
         // ---- Cache HIT ---- update in place
         Node* node = it->second;
+        Monitor::log(4, "Cache", "WRITE block=" + std::to_string(block_num) + " -> HIT  (marked dirty)");
         memcpy(node->data, buf, BLOCK_SIZE);
         node->dirty = true;
         move_to_head(node);
         return true;
     }
 
+    Monitor::log(4, "Cache", "WRITE block=" + std::to_string(block_num) + " -> MISS (evicting LRU)");
     // ---- Cache MISS ----
     Node* node;
 
@@ -170,6 +176,7 @@ bool BlockCache::write(int block_num, const void* buf) {
 //  flush: write all dirty blocks to disk
 // ============================================================
 void BlockCache::flush() {
+    Monitor::log(4, "Cache", "flush() - writing all dirty blocks to disk");
     Node* cur = head->next;
     while (cur != tail) {
         if (cur->dirty) write_to_disk(cur);

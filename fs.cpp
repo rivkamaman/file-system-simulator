@@ -4,6 +4,7 @@
 // ============================================================
 #include "fs.h"
 #include "cache.h"
+#include "monitor.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -32,6 +33,7 @@ bool FileSystem::valid_fd(int fd) const {
 //  Session management
 // ============================================================
 int FileSystem::login(int user_id) {
+    Monitor::log(2, "FileSystem", "login(user=" + std::to_string(user_id) + ")");
     if (logged_in) { std::cerr << "Already logged in\n"; return -1; }
     current_user = user_id;
     logged_in    = true;
@@ -46,8 +48,9 @@ int FileSystem::login(int user_id) {
         sb.inode_bitmap[0] |= 1;
         sb.free_inodes_count--;
         root = {};
-        root.type  = TYPE_DIR;
-        root.owner = 0;
+        root.type        = TYPE_DIR;
+        root.owner       = 0;
+        root.permissions = 33;  // owner:all, others:all (root is world-writable)
         Disk::write_inode(0, root);
         Disk::write_superblock(sb);
         Disk::read_superblock(sb); // re-read updated sb
@@ -82,6 +85,7 @@ int FileSystem::logout() {
 //  Directory commands
 // ============================================================
 int FileSystem::mkdir(const std::string& dir_name) {
+    Monitor::log(2, "FileSystem", "MakeDir(" + dir_name + ")");
     if (!logged_in) { std::cerr << "Not logged in\n"; return 0; }
 
     std::string path = abs_path(dir_name);
@@ -92,7 +96,7 @@ int FileSystem::mkdir(const std::string& dir_name) {
 
     SuperBlock sb;
     Disk::read_superblock(sb);
-    int ni = LowFS::create_inode(sb, TYPE_DIR, current_user, ACCESS_READWRITE);
+    int ni = LowFS::create_inode(sb, TYPE_DIR, current_user, 30);  // owner:all, others:none
     if (ni < 0) { std::cerr << "mkdir: no free i-nodes\n"; return 0; }
     Disk::write_superblock(sb);
     LowFS::add_to_dir(parent, ni, bname);
@@ -102,6 +106,7 @@ int FileSystem::mkdir(const std::string& dir_name) {
 }
 
 int FileSystem::rmdir(const std::string& dir_name) {
+    Monitor::log(2, "FileSystem", "RmDir(" + dir_name + ")");
     if (!logged_in) { std::cerr << "Not logged in\n"; return 0; }
 
     std::string path = abs_path(dir_name);
@@ -155,6 +160,7 @@ int FileSystem::ls() {
 //  File commands
 // ============================================================
 int FileSystem::create(const std::string& file_name) {
+    Monitor::log(2, "FileSystem", "create(" + file_name + ")");
     if (!logged_in) { std::cerr << "Not logged in\n"; return -1; }
 
     std::string path = abs_path(file_name);
@@ -164,7 +170,7 @@ int FileSystem::create(const std::string& file_name) {
     }
 
     SuperBlock sb; Disk::read_superblock(sb);
-    int ni = LowFS::create_inode(sb, TYPE_FILE, current_user, ACCESS_READWRITE);
+    int ni = LowFS::create_inode(sb, TYPE_FILE, current_user, 30);  // owner:all, others:none
     if (ni < 0) { std::cerr << "create: no free i-nodes\n"; return -1; }
     Disk::write_superblock(sb);
     LowFS::add_to_dir(parent, ni, bname);
@@ -178,11 +184,22 @@ int FileSystem::create(const std::string& file_name) {
 }
 
 int FileSystem::open(const std::string& file_name, int mode) {
+    Monitor::log(2, "FileSystem", "Open(" + file_name + ", mode=" + std::to_string(mode) + ")");
     if (!logged_in) { std::cerr << "Not logged in\n"; return -1; }
 
     std::string path = abs_path(file_name);
     int inode_num = LowFS::resolve_path(path);
     if (inode_num == -1) { std::cerr << "open: file not found\n"; return -1; }
+
+    // Check permissions
+    INode f; Disk::read_inode(inode_num, f);
+    bool is_owner = (f.owner == current_user);
+    if ((mode == ACCESS_READ || mode == ACCESS_READWRITE) && !can_read(f.permissions, is_owner)) {
+        std::cerr << "open: permission denied (no read access)\n"; return -1;
+    }
+    if ((mode == ACCESS_WRITE || mode == ACCESS_READWRITE) && !can_write(f.permissions, is_owner)) {
+        std::cerr << "open: permission denied (no write access)\n"; return -1;
+    }
 
     int fd = alloc_fd();
     if (fd < 0) { std::cerr << "open: no free file descriptors\n"; return -1; }
@@ -193,6 +210,7 @@ int FileSystem::open(const std::string& file_name, int mode) {
 }
 
 int FileSystem::close(int fd) {
+    Monitor::log(2, "FileSystem", "Close(fd=" + std::to_string(fd) + ")");
     if (!valid_fd(fd)) { std::cerr << "close: invalid fd\n"; return 0; }
     open_table[fd] = {};
     std::cout << "Closed fd=" << fd << "\n";
@@ -200,6 +218,7 @@ int FileSystem::close(int fd) {
 }
 
 int FileSystem::read(int fd, int num_bytes) {
+    Monitor::log(2, "FileSystem", "Read(fd=" + std::to_string(fd) + ", bytes=" + std::to_string(num_bytes) + ")");
     if (!valid_fd(fd))  { std::cerr << "read: invalid fd\n"; return -1; }
     if (open_table[fd].mode == ACCESS_WRITE) {
         std::cerr << "read: file opened write-only\n"; return -1;
@@ -218,6 +237,7 @@ int FileSystem::read(int fd, int num_bytes) {
 }
 
 int FileSystem::write(int fd, const std::string& data) {
+    Monitor::log(2, "FileSystem", "Write(fd=" + std::to_string(fd) + ", bytes=" + std::to_string(data.size()) + ")");
     if (!valid_fd(fd)) { std::cerr << "write: invalid fd\n"; return -1; }
     if (open_table[fd].mode == ACCESS_READ) {
         std::cerr << "write: file opened read-only\n"; return -1;
@@ -237,6 +257,7 @@ int FileSystem::write(int fd, const std::string& data) {
 }
 
 int FileSystem::seek(int fd, int location) {
+    Monitor::log(2, "FileSystem", "Seek(fd=" + std::to_string(fd) + ", loc=" + std::to_string(location) + ")");
     if (!valid_fd(fd)) { std::cerr << "seek: invalid fd\n"; return -1; }
 
     INode f; Disk::read_inode(open_table[fd].inode_num, f);
@@ -249,6 +270,7 @@ int FileSystem::seek(int fd, int location) {
 }
 
 int FileSystem::rm(const std::string& file_name) {
+    Monitor::log(2, "FileSystem", "RmFile(" + file_name + ")");
     if (!logged_in) { std::cerr << "Not logged in\n"; return 0; }
 
     std::string path = abs_path(file_name);
@@ -321,5 +343,31 @@ int FileSystem::import_file(const std::string& unix_path,
     int written = write(fd, data);
     close(fd);
     std::cout << "Imported " << unix_path << " (" << written << " bytes)\n";
+    return 1;
+}
+
+int FileSystem::chmod(int mode, const std::string& file_name) {
+    Monitor::log(2, "FileSystem", "ChMod(mode=" + std::to_string(mode) + ", file=" + file_name + ")");
+    if (!logged_in) { std::cerr << "Not logged in\n"; return 0; }
+
+    // Validate mode: tens digit and units digit must be 0-3
+    int owner_perm  = mode / 10;
+    int others_perm = mode % 10;
+    if (owner_perm > 3 || others_perm > 3) {
+        std::cerr << "chmod: invalid mode (use 0-3 for each digit, e.g. 31)\n"; return 0;
+    }
+
+    std::string path = abs_path(file_name);
+    int inode_num = LowFS::resolve_path(path);
+    if (inode_num == -1) { std::cerr << "chmod: file not found\n"; return 0; }
+
+    INode f; Disk::read_inode(inode_num, f);
+    if (f.owner != current_user) {
+        std::cerr << "chmod: permission denied (not owner)\n"; return 0;
+    }
+
+    f.permissions = mode;
+    Disk::write_inode(inode_num, f);
+    std::cout << "Mode changed to " << mode << " for " << file_name << "\n";
     return 1;
 }

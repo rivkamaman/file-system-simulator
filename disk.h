@@ -31,10 +31,31 @@ const int TYPE_FREE = 0;
 const int TYPE_FILE = 1;
 const int TYPE_DIR  = 2;
 
-// Access modes
+// Open modes (for open() call)
 const int ACCESS_READ       = 0;
 const int ACCESS_WRITE      = 1;
 const int ACCESS_READWRITE  = 2;
+
+// Permission bits (stored in INode::permissions)
+// Format: tens digit = owner, units digit = others
+// 0=none, 1=read, 2=write, 3=read+write
+const int PERM_NONE         = 0;
+const int PERM_READ         = 1;
+const int PERM_WRITE        = 2;
+const int PERM_ALL          = 3;
+
+// Helper macros
+// permissions = owner*10 + others  (e.g. 31 = owner:all, others:read)
+inline int perm_owner(uint8_t p)  { return p / 10; }
+inline int perm_others(uint8_t p) { return p % 10; }
+inline bool can_read (uint8_t p, bool is_owner) {
+    int bits = is_owner ? perm_owner(p) : perm_others(p);
+    return bits == PERM_READ || bits == PERM_ALL;
+}
+inline bool can_write(uint8_t p, bool is_owner) {
+    int bits = is_owner ? perm_owner(p) : perm_others(p);
+    return bits == PERM_WRITE || bits == PERM_ALL;
+}
 
 // ============================================================
 //  i-node  (exactly 64 bytes, as required by the assignment)

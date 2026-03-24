@@ -44,6 +44,7 @@ public:
     int rm    (const std::string& file_name);
     int copy  (const std::string& src, const std::string& dst);
     int import_file(const std::string& unix_path, const std::string& sim_path);
+    int chmod(int mode, const std::string& file_name);
 
 private:
     int           current_user;

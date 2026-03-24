@@ -4,6 +4,7 @@
 // ============================================================
 #include "disk.h"
 #include "cache.h"
+#include "monitor.h"
 
 const char* Disk::DISK_FILE = "FILE_SYS";
 
@@ -46,10 +47,12 @@ bool Disk::init() {
 //  read_block / write_block  –  go through cache
 // ----------------------------------------------------------------
 bool Disk::read_block(int block_num, void* buf) {
+    Monitor::log(5, "Disk", "b_read(block=" + std::to_string(block_num) + ")");
     return g_cache.read(block_num, buf);
 }
 
 bool Disk::write_block(int block_num, const void* buf) {
+    Monitor::log(5, "Disk", "b_write(block=" + std::to_string(block_num) + ")");
     return g_cache.write(block_num, buf);
 }
 
@@ -76,6 +79,7 @@ bool Disk::write_superblock(const SuperBlock& sb) {
 //  i-node helpers  (use cache via read_block / write_block)
 // ----------------------------------------------------------------
 bool Disk::read_inode(int inode_num, INode& inode) {
+    Monitor::log(5, "Disk", "i_read(inode=" + std::to_string(inode_num) + ")");
     // Each i-node occupies one complete block (as per assignment spec)
     int block = INODE_TABLE_START + inode_num;
     char buf[BLOCK_SIZE];
@@ -85,6 +89,7 @@ bool Disk::read_inode(int inode_num, INode& inode) {
 }
 
 bool Disk::write_inode(int inode_num, const INode& inode) {
+    Monitor::log(5, "Disk", "i_write(inode=" + std::to_string(inode_num) + ")");
     // Each i-node occupies one complete block (as per assignment spec)
     int block = INODE_TABLE_START + inode_num;
     char buf[BLOCK_SIZE] = {};

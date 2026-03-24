@@ -6,7 +6,7 @@ TARGET   = fs_simulator
 # Layer 3: Low-Level FS Calls
 # Layer 2: User System Calls
 # Layer 1: User Interface (main)
-SRCS = main.cpp fs.cpp lowfs.cpp disk.cpp cache.cpp
+SRCS = main.cpp fs.cpp lowfs.cpp disk.cpp cache.cpp monitor.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 all: $(TARGET)

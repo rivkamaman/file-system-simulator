@@ -1,4 +1,5 @@
 # File System Simulator
+Operating Systems – Assignment 5
 
 ---
 
@@ -7,6 +8,12 @@
 ```bash
 make
 ./fs_simulator
+```
+
+To run the automated tests:
+```bash
+chmod +x test.sh
+./test.sh
 ```
 
 To clean build files:
@@ -25,6 +32,7 @@ make clean
 | `lowfs.h / lowfs.cpp` | Layer 3 | Low-level FS – directory management, path resolution, block-level file I/O |
 | `fs.h / fs.cpp` | Layer 2 | User system calls – session management, open-file table, commands |
 | `main.cpp` | Layer 1 | User interface – reads commands from stdin |
+| `test.sh` | – | Automated test suite (31 tests) |
 
 Each layer uses **only** the services of the layer directly below it.
 
@@ -112,3 +120,4 @@ Use `cache_status` to see which blocks are currently cached and whether they are
 ## Persistence
 
 The filesystem is stored in `FILE_SYS`. On first run it is initialized automatically. All subsequent runs load the existing state — data is never lost between sessions.
+
