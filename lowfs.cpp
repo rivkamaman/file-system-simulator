@@ -123,11 +123,22 @@ int LowFS::resolve_path(const std::string& path, int* parent_inode,
         par_inode = cur_inode;
         int next = find_in_dir(cur_inode, parts[i]);
         if (next == -1) {
-            // Last component not found — set parent so caller can create it
             if (parent_inode) *parent_inode = par_inode;
             if (base_name)    *base_name    = parts[i];
             return -1;
         }
+
+        // Follow symlink (but not on last component — caller may want the link itself)
+        INode nd; Disk::read_inode(next, nd);
+        if (nd.type == TYPE_SYMLINK && i < (int)parts.size() - 1) {
+            // Read the target path stored in the symlink data
+            char target[BLOCK_SIZE] = {};
+            inode_read(nd, 0, target, nd.size);
+            // Recursively resolve the symlink target
+            next = resolve_path(std::string(target));
+            if (next == -1) return -1;
+        }
+
         cur_inode = next;
     }
 
@@ -287,6 +298,7 @@ int LowFS::create_inode(SuperBlock& sb, uint8_t type,
     nd.type        = type;
     nd.owner       = owner;
     nd.permissions = permissions;
+    nd.link_count  = 1;
     nd.size        = 0;
     Disk::write_inode(ni, nd);
     return ni;
@@ -294,6 +306,12 @@ int LowFS::create_inode(SuperBlock& sb, uint8_t type,
 
 void LowFS::free_inode_data(SuperBlock& sb, INode& inode, int inode_num) {
     Monitor::log(3, "LowFS", "f_delete(inode=" + std::to_string(inode_num) + ")");
+    // Decrement hard link count — only free data when no links remain
+    if (inode.link_count > 1) {
+        inode.link_count--;
+        Disk::write_inode(inode_num, inode);
+        return;
+    }
     // Free all direct blocks
     for (int i = 0; i < DIRECT_BLOCKS; i++) {
         if (inode.direct[i]) {

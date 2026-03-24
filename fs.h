@@ -45,10 +45,14 @@ public:
     int copy  (const std::string& src, const std::string& dst);
     int import_file(const std::string& unix_path, const std::string& sim_path);
     int chmod(int mode, const std::string& file_name);
+    int cd   (const std::string& dir_name);  // change current directory
+    std::string pwd() const;                  // print current directory
+    int ln   (const std::string& target, const std::string& link_name, bool soft); // create link
 
 private:
     int           current_user;
     bool          logged_in;
+    std::string   current_dir;   // current working directory (full absolute path)
     OpenFileEntry open_table[MAX_OPEN_FILES];
 
     // Build an absolute path from a user-relative name

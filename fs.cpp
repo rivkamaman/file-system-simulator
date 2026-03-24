@@ -9,14 +9,15 @@
 #include <fstream>
 #include <vector>
 
-FileSystem::FileSystem() : current_user(-1), logged_in(false) {}
+FileSystem::FileSystem() : current_user(-1), logged_in(false), current_dir("/") {}
 
 // ============================================================
 //  Private helpers
 // ============================================================
 std::string FileSystem::abs_path(const std::string& name) const {
-    if (!name.empty() && name[0] == '/') return name;
-    return "/user" + std::to_string(current_user) + "/" + name;
+    if (!name.empty() && name[0] == '/') return name;  // already absolute
+    if (current_dir == "/") return "/" + name;
+    return current_dir + "/" + name;
 }
 
 int FileSystem::alloc_fd() {
@@ -65,7 +66,8 @@ int FileSystem::login(int user_id) {
         LowFS::add_to_dir(0, ni, home);
     }
 
-    std::cout << "Logged in as user" << user_id << "\n";
+    current_dir = "/user" + std::to_string(user_id);
+    std::cout << "Logged in as user" << user_id << " (cwd=" << current_dir << ")\n";
     return 0;
 }
 
@@ -77,6 +79,7 @@ int FileSystem::logout() {
     g_cache.flush();
     logged_in    = false;
     current_user = -1;
+    current_dir  = "/";
     std::cout << "Logged out\n";
     return 0;
 }
@@ -130,9 +133,9 @@ int FileSystem::rmdir(const std::string& dir_name) {
 int FileSystem::ls() {
     if (!logged_in) { std::cerr << "Not logged in\n"; return 0; }
 
-    std::string home_path = "/user" + std::to_string(current_user);
-    int dir_inode = LowFS::resolve_path(home_path);
-    if (dir_inode == -1) { std::cerr << "ls: home dir not found\n"; return 0; }
+    std::cout << current_dir << ":\n";
+    int dir_inode = LowFS::resolve_path(current_dir);
+    if (dir_inode == -1) { std::cerr << "ls: directory not found\n"; return 0; }
 
     INode dir; Disk::read_inode(dir_inode, dir);
     int blocks_used = (dir.size + BLOCK_SIZE - 1) / BLOCK_SIZE;
@@ -191,8 +194,15 @@ int FileSystem::open(const std::string& file_name, int mode) {
     int inode_num = LowFS::resolve_path(path);
     if (inode_num == -1) { std::cerr << "open: file not found\n"; return -1; }
 
-    // Check permissions
+    // Follow symlink if needed
     INode f; Disk::read_inode(inode_num, f);
+    if (f.type == TYPE_SYMLINK) {
+        char target[BLOCK_SIZE] = {};
+        LowFS::inode_read(f, 0, target, f.size);
+        inode_num = LowFS::resolve_path(std::string(target));
+        if (inode_num == -1) { std::cerr << "open: broken symlink\n"; return -1; }
+        Disk::read_inode(inode_num, f);
+    }
     bool is_owner = (f.owner == current_user);
     if ((mode == ACCESS_READ || mode == ACCESS_READWRITE) && !can_read(f.permissions, is_owner)) {
         std::cerr << "open: permission denied (no read access)\n"; return -1;
@@ -369,5 +379,108 @@ int FileSystem::chmod(int mode, const std::string& file_name) {
     f.permissions = mode;
     Disk::write_inode(inode_num, f);
     std::cout << "Mode changed to " << mode << " for " << file_name << "\n";
+    return 1;
+}
+
+// ============================================================
+//  cd - change current directory
+// ============================================================
+int FileSystem::cd(const std::string& dir_name) {
+    Monitor::log(2, "FileSystem", "ChDir(" + dir_name + ")");
+    if (!logged_in) { std::cerr << "Not logged in\n"; return 0; }
+
+    // Build target path
+    std::string target;
+    if (dir_name == "..") {
+        // Go up one level — but not above user's home
+        std::string home = "/user" + std::to_string(current_user);
+        if (current_dir == home) {
+            std::cerr << "cd: already at home directory\n"; return 0;
+        }
+        // Strip last component
+        size_t pos = current_dir.rfind('/');
+        target = (pos == 0) ? "/" : current_dir.substr(0, pos);
+    } else {
+        target = abs_path(dir_name);
+    }
+
+    // Verify target exists and is a directory
+    int inode_num = LowFS::resolve_path(target);
+    if (inode_num == -1) { std::cerr << "cd: directory not found\n"; return 0; }
+
+    INode nd; Disk::read_inode(inode_num, nd);
+    if (nd.type != TYPE_DIR) { std::cerr << "cd: not a directory\n"; return 0; }
+
+    // Check read permission
+    bool is_owner = (nd.owner == current_user);
+    if (!can_read(nd.permissions, is_owner)) {
+        std::cerr << "cd: permission denied\n"; return 0;
+    }
+
+    current_dir = target;
+    std::cout << "cwd: " << current_dir << "\n";
+    return 1;
+}
+
+// ============================================================
+//  pwd - print current directory
+// ============================================================
+std::string FileSystem::pwd() const {
+    std::cout << current_dir << "\n";
+    return current_dir;
+}
+
+// ============================================================
+//  ln - create hard or soft link
+//  soft=false → hard link (same inode, increments link_count)
+//  soft=true  → soft link (new inode, stores target path)
+// ============================================================
+int FileSystem::ln(const std::string& target, const std::string& link_name, bool soft) {
+    Monitor::log(2, "FileSystem", std::string(soft ? "soft" : "hard") + "_link(" + target + " -> " + link_name + ")");
+    if (!logged_in) { std::cerr << "Not logged in\n"; return 0; }
+
+    std::string target_path   = abs_path(target);
+    std::string link_path     = abs_path(link_name);
+
+    // Resolve target
+    int target_inode = LowFS::resolve_path(target_path);
+    if (target_inode == -1) { std::cerr << "ln: target not found\n"; return 0; }
+
+    // Link must not already exist
+    int parent; std::string bname;
+    if (LowFS::resolve_path(link_path, &parent, &bname) != -1) {
+        std::cerr << "ln: link already exists\n"; return 0;
+    }
+
+    if (!soft) {
+        // ---- Hard link ----
+        INode t; Disk::read_inode(target_inode, t);
+        if (t.type == TYPE_DIR) {
+            std::cerr << "ln: cannot hard-link a directory\n"; return 0;
+        }
+        // Add new directory entry pointing to same inode
+        LowFS::add_to_dir(parent, target_inode, bname);
+        // Increment link count
+        t.link_count++;
+        Disk::write_inode(target_inode, t);
+        std::cout << "Hard link created: " << bname << " -> inode " << target_inode << "\n";
+
+    } else {
+        // ---- Soft link ----
+        SuperBlock sb; Disk::read_superblock(sb);
+        int ni = LowFS::create_inode(sb, TYPE_SYMLINK, current_user, 33);
+        if (ni < 0) { std::cerr << "ln: no free i-nodes\n"; return 0; }
+        Disk::write_superblock(sb);
+
+        // Store target path as the symlink's data
+        INode lnk; Disk::read_inode(ni, lnk);
+        Disk::read_superblock(sb);
+        LowFS::inode_write(sb, lnk, ni, 0,
+                           target_path.c_str(), (int)target_path.size());
+        Disk::write_superblock(sb);
+
+        LowFS::add_to_dir(parent, ni, bname);
+        std::cout << "Soft link created: " << bname << " -> " << target_path << "\n";
+    }
     return 1;
 }

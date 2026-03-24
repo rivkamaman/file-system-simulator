@@ -110,6 +110,24 @@ int main() {
             if (tok.size() < 3) { std::cerr << "Usage: chmod <mode> <file>\n"; continue; }
             fs.chmod(std::stoi(tok[1]), tok[2]);
 
+        } else if (cmd == "cd") {
+            if (tok.size() < 2) { std::cerr << "Usage: cd <dir>\n"; continue; }
+            fs.cd(tok[1]);
+
+        } else if (cmd == "pwd") {
+            fs.pwd();
+
+        } else if (cmd == "ln") {
+            // ln <target> <link>       → hard link
+            // ln -s <target> <link>    → soft link
+            if (tok.size() == 4 && tok[1] == "-s") {
+                fs.ln(tok[2], tok[3], true);
+            } else if (tok.size() == 3) {
+                fs.ln(tok[1], tok[2], false);
+            } else {
+                std::cerr << "Usage: ln <target> <link> OR ln -s <target> <link>\n";
+            }
+
         } else if (cmd == "cache_status") {
             g_cache.print_status();
 

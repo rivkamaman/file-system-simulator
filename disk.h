@@ -27,9 +27,10 @@ const int DIRECT_BLOCKS    = 10;
 const int INODE_SIZE        = 40;           // must match sizeof(INode)
 
 // File types
-const int TYPE_FREE = 0;
-const int TYPE_FILE = 1;
-const int TYPE_DIR  = 2;
+const int TYPE_FREE    = 0;
+const int TYPE_FILE    = 1;
+const int TYPE_DIR     = 2;
+const int TYPE_SYMLINK = 3;  // soft link — data contains target path
 
 // Open modes (for open() call)
 const int ACCESS_READ       = 0;
@@ -63,10 +64,10 @@ inline bool can_write(uint8_t p, bool is_owner) {
 // ============================================================
 #pragma pack(push, 1)
 struct INode {
-    uint8_t  type;                      // TYPE_FREE / TYPE_FILE / TYPE_DIR
+    uint8_t  type;                      // TYPE_FREE / TYPE_FILE / TYPE_DIR / TYPE_SYMLINK
     uint8_t  owner;                     // user id (0 = root)
     uint8_t  permissions;               // ACCESS_READ / WRITE / READWRITE
-    uint8_t  _pad;
+    uint8_t  link_count;                // number of hard links pointing to this inode
     uint32_t size;                      // file size in bytes
     uint16_t direct[DIRECT_BLOCKS];     // direct block numbers (2 bytes each)
     uint16_t single_indirect;           // single-indirect block
