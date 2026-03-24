@@ -4,7 +4,7 @@
 
 ## Overview
 
-This project implements a UNIX-based file system simulator in C++. The simulator models a complete file system on top of a single binary file (FILE_SYS) that acts as the virtual disk. It supports multiple users, persistent storage across sessions, and all standard file operations such as create, read, write, seek, copy, and import. The system is built in four layers — user interface, user system calls, low-level file system, and simulated disk — where each layer uses only the services of the layer below it. Block I/O is handled through a 6-slot LRU cache with a dirty-bit mechanism, implemented using a doubly linked list and a hashmap for O(1) performance.
+This project implements a UNIX-based file system simulator in C++. The simulator models a complete file system on top of a single binary file (FILE_SYS) that acts as the virtual disk. It supports multiple users, persistent storage across sessions, and all standard file operations such as create, read, write, seek, copy, and import. The system is built in four layers - user interface, user system calls, low-level file system, and simulated disk - where each layer uses only the services of the layer below it. Block I/O is handled through a 6-slot LRU cache with a dirty-bit mechanism, implemented using a doubly linked list and a hashmap for O(1) performance.
 
 ---
 
