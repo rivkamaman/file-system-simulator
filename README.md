@@ -91,7 +91,7 @@ no_monitor                   Disable monitor mode
 
 ## Block Cache
 
-- **Size:** 3 slots (as required by assignment)
+- **Size:** 6 slots 
 - **Algorithm:** LRU (Least Recently Used)
 - **Data structures:** Doubly linked list + HashMap
   - Head = Most Recently Used
