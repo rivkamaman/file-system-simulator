@@ -2,7 +2,7 @@
 // ============================================================
 //  Block Cache  -  LRU with Doubly Linked List + HashMap
 //
-//  - 3-slot buffer (CACHE_SIZE)
+//  - 6-slot buffer (CACHE_SIZE)
 //  - O(1) lookup via unordered_map<block_num, Node*>
 //  - O(1) eviction via doubly linked list (tail = LRU)
 //  - Dirty-bit: modified blocks flushed to disk on eviction
@@ -10,7 +10,7 @@
 #include "disk.h"
 #include <unordered_map>
 
-const int CACHE_SIZE = 3;
+const int CACHE_SIZE = 6;
 
 // ---- Doubly linked list node --------------------------------
 struct Node {
